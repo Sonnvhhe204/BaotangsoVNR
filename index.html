@@ -701,9 +701,110 @@
             }
         };
 
+        const quizAnswerKey = {
+            'xe-dap': 'B',
+            'tem-phieu': 'B',
+            'loa-phuong': 'C',
+            'so-gao': 'B',
+            'phich-nuoc': 'B',
+            'cuc-gach': 'B',
+            'radio-cassette': 'B',
+            'quan-popeye': 'B'
+        };
+
+        let currentExhibitId = null;
+
+        function parseQuizContent(quizHtml) {
+            const lines = quizHtml
+                .split('<br>')
+                .map(line => line.trim())
+                .filter(Boolean);
+
+            const question = lines.shift() || '';
+            const options = lines
+                .map(line => {
+                    const matched = line.match(/^([A-Z])\.\s*(.*)$/);
+                    return matched
+                        ? { key: matched[1], text: matched[2].trim() }
+                        : null;
+                })
+                .filter(Boolean);
+
+            return { question, options };
+        }
+
+        function closeQuizPopup() {
+            const popup = document.getElementById('quizResultPopup');
+            if (popup) popup.remove();
+        }
+
+        function showQuizPopup(title, content, color) {
+            closeQuizPopup();
+            const popup = document.createElement('div');
+            popup.id = 'quizResultPopup';
+            popup.innerHTML = `
+                <div style="position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:10001; display:flex; align-items:center; justify-content:center; padding:20px;">
+                    <div style="background:#fff; max-width:520px; width:100%; border-radius:12px; box-shadow:0 15px 45px rgba(0,0,0,0.25); padding:24px; font-family:Arial,sans-serif;">
+                        <h3 style="margin:0 0 12px; color:${color}; font-size:1.4rem;">${title}</h3>
+                        <div style="color:#333; line-height:1.5; margin-bottom:20px;">${content}</div>
+                        <button onclick="closeQuizPopup()" style="background:var(--fpt-orange); border:none; color:white; padding:10px 20px; cursor:pointer; font-weight:bold; border-radius:6px;">
+                            Đóng
+                        </button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(popup);
+        }
+
+        function submitQuizAnswer() {
+            if (!currentExhibitId) return;
+
+            const selectedOption = document.querySelector('input[name="quizOption"]:checked');
+            if (!selectedOption) {
+                showQuizPopup(
+                    'Bạn chưa chọn đáp án',
+                    'Vui lòng chọn một đáp án trước khi gửi phản hồi.',
+                    '#d35400'
+                );
+                return;
+            }
+
+            const correctAnswer = quizAnswerKey[currentExhibitId];
+            const correctInput = document.querySelector(`input[name="quizOption"][value="${correctAnswer}"]`);
+            const correctText = correctInput
+                ? `${correctAnswer}. ${correctInput.getAttribute('data-option-text')}`
+                : correctAnswer;
+
+            if (selectedOption.value === correctAnswer) {
+                showQuizPopup(
+                    'Chính xác!',
+                    `Bạn đã chọn đúng đáp án.<br><br><strong>Đáp án đúng:</strong> ${correctText}`,
+                    '#27ae60'
+                );
+                return;
+            }
+
+            showQuizPopup(
+                'Chưa chính xác',
+                `Bạn đã chọn <strong>${selectedOption.value}</strong>.<br><br><strong>Đáp án đúng:</strong> ${correctText}<br>Hãy thử đọc lại phần phân tích để hiểu sâu hơn nhé!`,
+                '#c0392b'
+            );
+        }
+
         function openExhibit(id) {
             const data = exhibitData[id];
             if (!data) return;
+            currentExhibitId = id;
+
+            const quizContent = parseQuizContent(data.quiz);
+            const quizOptionsHtml = quizContent.options
+                .map(option => `
+                    <label style="display:block; margin:10px 0; cursor:pointer;">
+                        <input type="radio" name="quizOption" value="${option.key}" data-option-text="${option.text.replace(/"/g, '&quot;')}" style="margin-right:8px;">
+                        <strong>${option.key}.</strong> ${option.text}
+                    </label>
+                `)
+                .join('');
 
             // Render nội dung cực dày
             document.getElementById('modalData').innerHTML = `
@@ -730,8 +831,9 @@
 
                 <div class="quiz-box">
                     <h4 style="margin-top:0;">📝 Câu hỏi Suy ngẫm (Critical Thinking):</h4>
-                    <p>${data.quiz}</p>
-                    <button onclick="alert('Chúc mừng bạn đã hoàn thành phần nghiên cứu này! Hãy ghi lại đáp án vào sổ tay học tập.')" 
+                    <p style="font-weight:600;">${quizContent.question}</p>
+                    <div>${quizOptionsHtml}</div>
+                    <button onclick="submitQuizAnswer()" 
                             style="background:var(--fpt-orange); border:none; color:white; padding:15px 30px; cursor:pointer; font-weight:bold; border-radius:5px;">
                         Gửi phản hồi của bạn
                     </button>
@@ -759,6 +861,7 @@
             loaPhuongSound.currentTime = 0;
             cassetteSound.pause();
             cassetteSound.currentTime = 0;
+            closeQuizPopup();
 
             document.getElementById('exhibitModal').style.display = 'none';
             document.body.style.overflow = 'auto';
